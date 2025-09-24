@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>지역별 소득 대비 소비 비율</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      margin: 0;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #212529;
+      color: #e9ecef;
+    }
+    header {
+      width: 100%;
+      max-width: 850px;
+      text-align: center;
+      padding: 30px 20px;
+      margin-bottom: 20px;
+      background-color: rgb(48, 54, 60);
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    }
+    header h2 {
+      font-size: 1.6em;
+      font-weight: 700;
+      color: #fff;
+      margin: 0 0 10px 0;
+    }
+    header p {
+      font-size: 1em;
+      color: #adb5bd;
+      line-height: 1.6;
+      margin: 0;
+    }
+    .controls {
+      width: 100%;
+      max-width: 850px;
+      text-align: center;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+    .controls select, .controls button {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #495057;
+        background-color: #343a40;
+        color: #e9ecef;
+        font-size: 1em;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .controls select:hover, .controls button:hover {
+        background-color: #495057;
+    }
+    .region-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+    }
+    .region-buttons button.active {
+        background-color: #1a5276;
+        border-color: #1a5276;
+        font-weight: bold;
+    }
+    .chart-container {
+      position: relative;
+      width: 850px;
+      height: 650px;
+      background-color: rgb(48, 54, 60);
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    }
+    svg {
+      width: 100%;
+      height: 100%;
+    }
+    .axis-label {
+      font-size: 14px;
+      font-weight: bold;
+      fill: #e9ecef;
+    }
+    .axis-grid line {
+      stroke: #495057;
+      stroke-opacity: 0.8;
+      stroke-width: 0.5px;
+      shape-rendering: crispEdges;
+    }
+    .axis-grid path {
+      stroke-width: 0;
+    }
+    .tooltip {
+      position: absolute;
+      background: rgba(45, 50, 55, 0.95);
+      border: 1px solid #495057;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #e9ecef;
+      pointer-events: none;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    .legend-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 30px;
+      font-size: 14px;
+      padding: 10px;
+      margin-top: 20px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-color {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+    .legend-text {
+      white-space: nowrap;
+    }
+    .label {
+      font-weight: 600;
+      font-size: 12px;
+      fill: #e9ecef;
+    }
+    circle {
+        transition: all 0.3s ease;
+        filter: drop-shadow(2px 2px 3px rgba(0, 0, 0, 0.2));
+    }
+    .footnote {
+        font-size: 0.9em;
+        color: #adb5bd;
+        margin-top: 10px;
+        text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h2>지역별 소득 대비 소비 비율</h2>
+    <p>개인소득, 소비지출, 인구 3가지 데이터를 사용하여 소득 대비 소비가 많은 지역과 적은 지역의 특성을 확인할 수 있습니다.</p>
+  </header>
+  <div class="controls">
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <label for="year-select">데이터 연도 선택:</label>
+      <select id="year-select">
+        <option value="all">모든 연도</option>
+        <option value="2023" selected>2023년</option>
+        <option value="2022">2022년</option>
+        <option value="2021">2021년</option>
+      </select>
+    </div>
+    <div id="region-buttons-container" class="region-buttons" style="display: none;">
+      <button id="reset-button">전체 보기</button>
+    </div>
+  </div>
+  <div class="chart-container">
+    <svg id="chart" width="850" height="650"></svg>
+  </div>
+  <div class="legend-container">
+    <div class="legend-item">
+      <span class="legend-color" style="background-color: #4CAF50;"></span>
+      <span class="legend-text">소득 대비 소비 비율 낮음 (저축 많음)</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-color" style="background-color: #FFEB3B;"></span>
+      <span class="legend-text">소득 대비 소비 비율 중간</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-color" style="background-color: #F44336;"></span>
+      <span class="legend-text">소득 대비 소비 비율 높음 (소비 많음)</span>
+    </div>
+    <div class="legend-item year-legend">
+      <span class="legend-color" style="background-color: #1A5276; border-radius: 2px;"></span>
+      <span class="legend-text">2021년</span>
+    </div>
+    <div class="legend-item year-legend">
+      <span class="legend-color" style="background-color: #B8860B; border-radius: 2px;"></span>
+      <span class="legend-text">2022년</span>
+    </div>
+    <div class="legend-item year-legend">
+      <span class="legend-color" style="background-color: #B22222; border-radius: 2px;"></span>
+      <span class="legend-text">2023년</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-color" style="background-color: #6c757d; border: 1px solid #495057;"></span>
+      <span class="legend-text">버블 크기: 해당 지역 인구수</span>
+    </div>
+  </div>
+  <p class="footnote">
+    
+  </p>
+
+  <script>
+    const allData = {
+      "2021": [
+        {region: "서울특별시", income: 27119, consumption: 24551, population: 9750000, year: 2021},
+        {region: "부산광역시", income: 22338, consumption: 20117, population: 3350000, year: 2021},
+        {region: "대구광역시", income: 22197, consumption: 20101, population: 2400000, year: 2021},
+        {region: "인천광역시", income: 23053, consumption: 18977, population: 2950000, year: 2021},
+        {region: "광주광역시", income: 23649, consumption: 20268, population: 1450000, year: 2021},
+        {region: "대전광역시", income: 24774, consumption: 20416, population: 1470000, year: 2021},
+        {region: "울산광역시", income: 25672, consumption: 20135, population: 1120000, year: 2021},
+        {region: "세종특별자치시", income: 25346, consumption: 20786, population: 360000, year: 2021}
+      ],
+      "2022": [
+        {region: "서울특별시", income: 28187, consumption: 26617, population: 9690000, year: 2022},
+        {region: "부산광역시", income: 23730, consumption: 21857, population: 3320000, year: 2022},
+        {region: "대구광역시", income: 23425, consumption: 21467, population: 2380000, year: 2022},
+        {region: "인천광역시", income: 24387, consumption: 21129, population: 2980000, year: 2022},
+        {region: "광주광역시", income: 25203, consumption: 22144, population: 1430000, year: 2022},
+        {region: "대전광역시", income: 26158, consumption: 22356, population: 1460000, year: 2022},
+        {region: "울산광역시", income: 27079, consumption: 21698, population: 1110000, year: 2022},
+        {region: "세종특별자치시", income: 25854, consumption: 22367, population: 375000, year: 2022}
+      ],
+      "2023": [
+        {region: "서울특별시", income: 29372, consumption: 27767, population: 9647225, year: 2023},
+        {region: "부산광역시", income: 24026, consumption: 23042, population: 3290637, year: 2023},
+        {region: "대구광역시", income: 23760, consumption: 22307, population: 2368383, year: 2023},
+        {region: "인천광역시", income: 24665, consumption: 21661, population: 3004419, year: 2023},
+        {region: "광주광역시", income: 25378, consumption: 23096, population: 1424751, year: 2023},
+        {region: "대전광역시", income: 26493, consumption: 23355, population: 1444265, year: 2023},
+        {region: "울산광역시", income: 28102, consumption: 23345, population: 1100913, year: 2023},
+        {region: "세종특별자치시", income: 25995, consumption: 23499, population: 387809, year: 2023}
+      ]
+    };
+    
+    const totalData = Object.values(allData).flat();
+    const populationExtent = d3.extent(totalData, d => d.population);
+
+    const regions = allData['2023'].map(d => d.region);
+    const regionButtonsContainer = d3.select("#region-buttons-container");
+    
+    regions.forEach(region => {
+        regionButtonsContainer.append("button")
+            .attr("class", "region-button")
+            .text(region)
+            .on("click", () => {
+                showRegionData(region);
+                d3.selectAll(".region-button").classed("active", false);
+                d3.select(d3.event.currentTarget).classed("active", true);
+            });
+    });
+
+    d3.select("#reset-button").on("click", () => {
+        handleYearChange('all');
+        d3.selectAll(".region-button").classed("active", false);
+    });
+
+    const svg = d3.select("#chart"),
+          width = +svg.attr("width"),
+          height = +svg.attr("height"),
+          margin = {top: 40, right: 40, bottom: 60, left: 120},
+          innerWidth = width - margin.left - margin.right,
+          innerHeight = height - margin.top - margin.bottom;
+
+    const x = d3.scaleLinear().range([0, innerWidth]);
+    const y = d3.scaleLinear().range([innerHeight, 0]);
+    
+    const size = d3.scaleSqrt();
+
+    const colorScale = d3.scaleLinear()
+      .range(["#4CAF50", "#FFEB3B", "#F44336"])
+      .interpolate(d3.interpolateHcl);
+      
+    const yearColorScale = d3.scaleOrdinal()
+      .domain([2021, 2022, 2023])
+      .range(["#1A5276", "#B8860B", "#B22222"]);
+    
+    const g = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const xAxisG = g.append("g")
+      .attr("transform", `translate(0,${innerHeight})`)
+      .attr("color", "#e9ecef");
+    
+    const yAxisG = g.append("g")
+      .attr("color", "#e9ecef");
+
+    const xGrid = g.append("g").attr("class", "axis-grid").attr("transform", `translate(0,${innerHeight})`);
+    const yGrid = g.append("g").attr("class", "axis-grid");
+
+    const xAxisLabel = g.append("text")
+      .attr("class", "axis-label")
+      .attr("x", innerWidth / 2)
+      .attr("y", innerHeight + 50)
+      .style("text-anchor", "middle")
+      .text("평균 소득 (단위: 천 원)");
+
+    const yAxisLabel = g.append("text")
+      .attr("class", "axis-label")
+      .attr("x", -innerHeight / 2)
+      .attr("y", -80)
+      .attr("transform", "rotate(-90)")
+      .style("text-anchor", "middle")
+      .text("평균 소비 지출액 (단위: 천 원)");
+
+    const line = g.append("line")
+      .attr("stroke", "#adb5bd")
+      .attr("stroke-dasharray", "5,5")
+      .attr("opacity", 0.8);
+
+    const tooltip = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0);
+
+    function updateChart(data, viewMode) {
+        const incomeExtent = d3.extent(data, d => d.income);
+        const consumptionExtent = d3.extent(data, d => d.consumption);
+        
+        // 시각 모드에 따라 버블 크기 범위 조정
+        if (viewMode === 'all') {
+            size.domain(populationExtent).range([5, 20]);
+        } else if (viewMode === 'single') {
+            size.domain(d3.extent(data, d => d.population)).range([5, 40]);
+        }
+        
+        const ratioExtent = d3.extent(data, d => d.consumption / d.income);
+        colorScale.domain([ratioExtent[0], (ratioExtent[0] + ratioExtent[1]) / 2, ratioExtent[1]]);
+
+        x.domain([d3.min([incomeExtent[0], consumptionExtent[0]]) - 500, d3.max([incomeExtent[1], consumptionExtent[1]]) + 500]);
+        y.domain([d3.min([incomeExtent[0], consumptionExtent[0]]) - 500, d3.max([incomeExtent[1], consumptionExtent[1]]) + 500]);
+        
+        xAxisG.transition().duration(750).call(d3.axisBottom(x));
+        yAxisG.transition().duration(750).call(d3.axisLeft(y));
+        
+        xGrid.transition().duration(750).call(d3.axisBottom(x).tickSize(-innerHeight).tickFormat(""));
+        yGrid.transition().duration(750).call(d3.axisLeft(y).tickSize(-innerWidth).tickFormat(""));
+
+        line.transition().duration(750)
+          .attr("x1", x(d3.min(x.domain())))
+          .attr("y1", y(d3.min(y.domain())))
+          .attr("x2", x(d3.max(x.domain())))
+          .attr("y2", y(d3.max(y.domain())));
+
+        const circles = g.selectAll("circle").data(data, d => d.region + d.year);
+        
+        circles.join(
+            enter => enter.append("circle")
+                .attr("cx", d => x(d.income))
+                .attr("cy", d => y(d.consumption))
+                .attr("r", 0)
+                .attr("fill", d => colorScale(d.consumption / d.income))
+                .attr("opacity", 0.8)
+                .attr("stroke", d => viewMode === 'all' ? yearColorScale(d.year) : null)
+                .attr("stroke-width", d => viewMode === 'all' ? 3 : 0)
+                .call(enter => enter.transition().duration(750)
+                    .attr("r", d => size(d.population))
+                ),
+
+            update => update.transition().duration(750)
+                .attr("cx", d => x(d.income))
+                .attr("cy", d => y(d.consumption))
+                .attr("r", d => size(d.population))
+                .attr("fill", d => colorScale(d.consumption / d.income))
+                .attr("stroke", d => viewMode === 'all' ? yearColorScale(d.year) : null)
+                .attr("stroke-width", d => viewMode === 'all' ? 3 : 0),
+
+            exit => exit.transition().duration(750)
+                .attr("r", 0)
+                .remove()
+        );
+        
+        g.selectAll("circle")
+            .on("mouseover", function(event, d) {
+                d3.select(this)
+                    .attr("opacity", 1)
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 2);
+                tooltip.transition().duration(200).style("opacity", .9);
+                const ratio = (d.consumption / d.income * 100).toFixed(1);
+                
+                let tooltipContent = `<b>${d.region}</b><br>소득: ${d.income.toLocaleString()}천 원<br>소비: ${d.consumption.toLocaleString()}천 원<br>소비 비율: ${ratio}%<br>인구: ${d.population.toLocaleString()}명`;
+                if (viewMode === 'all' || viewMode === 'region') {
+                    tooltipContent = `<b>${d.region} (${d.year})</b><br>소득: ${d.income.toLocaleString()}천 원<br>소비: ${d.consumption.toLocaleString()}천 원<br>소비 비율: ${ratio}%<br>인구: ${d.population.toLocaleString()}명`;
+                }
+
+                tooltip.html(tooltipContent)
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", function(event, d) {
+                d3.select(this)
+                    .attr("opacity", 0.8)
+                    .attr("fill", d => colorScale(d.consumption / d.income));
+                if (viewMode === 'all' || viewMode === 'region') {
+                    d3.select(this)
+                        .attr("stroke", yearColorScale(d.year))
+                        .attr("stroke-width", 3);
+                } else {
+                    d3.select(this)
+                        .attr("stroke", null)
+                        .attr("stroke-width", 0);
+                }
+                tooltip.transition().duration(500).style("opacity", 0);
+            });
+
+        const labels = g.selectAll(".label").data(data, d => d.region + d.year);
+        
+        const labelText = d => {
+            if (viewMode === 'all' || viewMode === 'single') {
+                return d.region;
+            } else if (viewMode === 'region') {
+                return d.year;
+            }
+        };
+
+        labels.join(
+            enter => enter.append("text")
+                .attr("class", "label")
+                .attr("x", d => x(d.income) + size(d.population)/2 + 5)
+                .attr("y", d => y(d.consumption))
+                .attr("opacity", 0)
+                .attr("dy", 3)
+                .text(labelText)
+                .attr("fill", "#e9ecef")
+                .call(enter => enter.transition().duration(750).attr("opacity", 1)),
+            
+            update => update.transition().duration(750)
+                .attr("x", d => x(d.income) + size(d.population)/2 + 5)
+                .attr("y", d => y(d.consumption))
+                .text(labelText),
+
+            exit => exit.transition().duration(750).attr("opacity", 0).remove()
+        );
+    }
+    
+    function handleYearChange(selectedYear) {
+        d3.select("#year-select").property("value", selectedYear);
+        d3.selectAll(".region-button").classed("active", false);
+
+        if (selectedYear === 'all') {
+            size.domain(populationExtent).range([5, 20]); // 모든 연도 데이터를 볼 때는 전체 인구 범위 적용
+            updateChart(Object.values(allData).flat(), 'all');
+            d3.select("#region-buttons-container").style("display", "flex");
+            d3.selectAll(".year-legend").style("display", "flex");
+        } else {
+            size.domain(d3.extent(allData[selectedYear], d => d.population)).range([5, 40]); // 특정 연도 데이터의 인구 범위 적용
+            updateChart(allData[selectedYear], 'single');
+            d3.select("#region-buttons-container").style("display", "none");
+            d3.selectAll(".year-legend").style("display", "none");
+        }
+    }
+
+    function showRegionData(regionName) {
+        const filteredData = Object.values(allData).map(yearData => 
+            yearData.find(d => d.region === regionName)
+        );
+        
+        const regionPopulationExtent = d3.extent(filteredData, d => d.population);
+        size.domain(regionPopulationExtent).range([5, 40]);
+
+        updateChart(filteredData, 'region');
+        d3.select("#year-select").property("value", 'all');
+        d3.select("#region-buttons-container").style("display", "flex");
+        d3.selectAll(".year-legend").style("display", "none");
+    }
+
+    d3.select("#year-select").on("change", function() {
+        handleYearChange(d3.select(this).property("value"));
+    });
+
+    handleYearChange('2023');
+  </script>
+</body>
+</html>
